@@ -1,3 +1,5 @@
+'use server'; // <-- this tells Next.js these are Server Actions
+
 import postgres from 'postgres';
 import {
   CustomerField,
@@ -16,12 +18,12 @@ export async function fetchRevenue() {
     // Artificially delay a response for demo purposes.
     // Don't do this in production :)
 
-    // console.log('Fetching revenue data...');
-    // await new Promise((resolve) => setTimeout(resolve, 3000));
+    console.log('Fetching revenue data...');
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     const data = await sql<Revenue[]>`SELECT * FROM revenue`;
 
-    // console.log('Data fetch completed after 3 seconds.');
+     console.log('Data fetch completed after 3 seconds.');
 
     return data;
   } catch (error) {
@@ -29,6 +31,28 @@ export async function fetchRevenue() {
     throw new Error('Failed to fetch revenue data.');
   }
 }
+
+// Create a new invoice
+export async function createInvoice(formData: FormData) {
+  try {
+    const customerId = formData.get('customerId') as string;
+    const amount = Number(formData.get('amount'));
+    const status = formData.get('status') as 'pending' | 'paid';
+
+    await sql`
+      INSERT INTO invoices (customer_id, amount, status, date)
+      VALUES (${customerId}, ${amount * 100}, ${status}, NOW())
+    `;
+
+    // Optional: after saving, redirect to invoices list
+    // import { redirect } from 'next/navigation';
+    // redirect('/dashboard/invoices');
+  } catch (error) {
+    console.error('Database Error:', error);
+    throw new Error('Failed to create invoice.');
+  }
+}
+
 
 export async function fetchLatestInvoices() {
   try {
