@@ -21,7 +21,11 @@ const FormSchema = z.object({
 });
 
 const CreateInvoice = FormSchema.omit({ id: true, date: true });
-const UpdateInvoice = FormSchema.omit({ id: true, date: true });
+const UpdateInvoice = z.object({
+  customerId: z.string().min(1, 'Customer is required'),
+  amount: z.coerce.number().gt(0, 'Amount must be greater than 0'),
+  status: z.enum(['pending', 'paid']),
+});
 
 // ==========================
 // AUTHENTICATION
@@ -31,7 +35,7 @@ export async function authenticate(prevState: string | undefined, formData: Form
     const result = await signIn('credentials', {
       email: formData.get('email'),
       password: formData.get('password'),
-      redirect: false,   // 🚀 prevent automatic redirect
+      redirect: false, // 🚀 prevent automatic redirect
     });
 
     if (result?.error) {
@@ -104,7 +108,11 @@ export async function createInvoice(prevState: State, formData: FormData) {
 // ==========================
 // UPDATE INVOICE
 // ==========================
-export async function updateInvoice(id: string, formData: FormData, prevState: State) {
+export async function updateInvoice(
+  id: string,
+  prevState: State,
+  formData: FormData
+): Promise<State | void> {
   const validatedFields = UpdateInvoice.safeParse({
     customerId: formData.get('customerId'),
     amount: formData.get('amount'),
@@ -114,7 +122,7 @@ export async function updateInvoice(id: string, formData: FormData, prevState: S
   if (!validatedFields.success) {
     return {
       errors: validatedFields.error.flatten().fieldErrors,
-      message: 'Missing Fields. Failed to Update Invoice.',
+      message: 'Missing or invalid fields. Failed to update invoice.',
     };
   }
 
@@ -128,7 +136,8 @@ export async function updateInvoice(id: string, formData: FormData, prevState: S
       WHERE id = ${id}
     `;
   } catch (error) {
-    return { message: 'Database Error: Failed to Update Invoice.' };
+    console.error('DB error updating invoice:', error);
+    return { message: 'Database Error: Failed to update invoice.' };
   }
 
   revalidatePath('/dashboard/invoices');
