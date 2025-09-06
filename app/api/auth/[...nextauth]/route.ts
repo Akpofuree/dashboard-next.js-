@@ -1,8 +1,12 @@
+// app/api/auth/[...nextauth]/route.ts
 import NextAuth from "next-auth";
 import { authConfig } from "@/auth.config";
 
-// Expose NextAuth handlers for API routes
 const handler = NextAuth(authConfig);
 
-export { handler as GET, handler as POST };
+// Correct API route exports
+export { handler as GET };
+export { handler as POST };
+
+// Force Node runtime so bcrypt/postgres works
 export const runtime = "nodejs";
