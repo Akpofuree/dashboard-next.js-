@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+
 import bcrypt from 'bcryptjs'; // ✅ switched from bcrypt to bcryptjs
 import postgres from 'postgres';
 import { invoices, customers, revenue, users } from '../lib/placeholder-data';
