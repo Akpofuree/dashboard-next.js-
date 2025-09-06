@@ -1,17 +1,16 @@
+// app/lib/actions.ts
 'use server';
 
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import postgres from 'postgres';
-import { signIn } from '@/auth';
+import { signIn } from '@/auth'; // server signIn exported from auth.ts
 import { AuthError } from 'next-auth';
 
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+const sql = postgres(process.env.POSTGRES_URL ?? process.env.DATABASE_URL!, { ssl: 'require' });
 
-// ==========================
-// SCHEMAS
-// ==========================
+// Schemas
 const FormSchema = z.object({
   id: z.string(),
   customerId: z.string({ invalid_type_error: 'Customer is required' }),
@@ -21,29 +20,28 @@ const FormSchema = z.object({
 });
 
 const CreateInvoice = FormSchema.omit({ id: true, date: true });
-const UpdateInvoice = z.object({
-  customerId: z.string().min(1, 'Customer is required'),
-  amount: z.coerce.number().gt(0, 'Amount must be greater than 0'),
-  status: z.enum(['pending', 'paid']),
-});
+const UpdateInvoice = FormSchema.omit({ id: true, date: true });
 
-// ==========================
-// AUTHENTICATION
-// ==========================
+// ---------------------
+// authenticate action
+// ---------------------
 export async function authenticate(prevState: string | undefined, formData: FormData) {
   try {
-    const result = await signIn('credentials', {
-      email: formData.get('email'),
-      password: formData.get('password'),
-      redirect: false, // 🚀 prevent automatic redirect
-    });
+    const email = String(formData.get('email') ?? '');
+    const password = String(formData.get('password') ?? '');
+    const redirectTo = String(formData.get('redirectTo') ?? '/dashboard');
 
+    // call NextAuth's signIn server helper with redirect: false so we can handle redirect server-side
+    const result = await signIn('credentials', { email, password, redirect: false });
+
+    // signIn may return { error } on failure.
     if (result?.error) {
-      return result.error; // pass back the error string to LoginForm
+      // Return an error string to client form state
+      return 'Invalid credentials.';
     }
 
-    // On success, redirect manually
-    return undefined; // no error → success
+    // Success: perform a server redirect so the client receives a proper redirect response
+    redirect(redirectTo);
   } catch (error) {
     if (error instanceof AuthError) {
       switch (error.type) {
@@ -57,9 +55,9 @@ export async function authenticate(prevState: string | undefined, formData: Form
   }
 }
 
-// ==========================
-// INVOICE STATE TYPE
-// ==========================
+// ---------------------
+// Invoice actions
+// ---------------------
 export type State = {
   errors?: {
     customerId?: string[];
@@ -69,12 +67,7 @@ export type State = {
   message?: string | null;
 };
 
-// ==========================
-// CREATE INVOICE
-// ==========================
 export async function createInvoice(prevState: State, formData: FormData) {
-  console.log('Form data received:', Object.fromEntries(formData.entries()));
-
   const validatedFields = CreateInvoice.safeParse({
     customerId: formData.get('customerId'),
     amount: formData.get('amount'),
@@ -102,17 +95,10 @@ export async function createInvoice(prevState: State, formData: FormData) {
   }
 
   revalidatePath('/dashboard/invoices');
-  redirect('/dashboard/invoices'); // execution stops here
+  redirect('/dashboard/invoices');
 }
 
-// ==========================
-// UPDATE INVOICE
-// ==========================
-export async function updateInvoice(
-  id: string,
-  prevState: State,
-  formData: FormData
-): Promise<State | void> {
+export async function updateInvoice(id: string, formData: FormData, prevState: State) {
   const validatedFields = UpdateInvoice.safeParse({
     customerId: formData.get('customerId'),
     amount: formData.get('amount'),
@@ -122,7 +108,7 @@ export async function updateInvoice(
   if (!validatedFields.success) {
     return {
       errors: validatedFields.error.flatten().fieldErrors,
-      message: 'Missing or invalid fields. Failed to update invoice.',
+      message: 'Missing Fields. Failed to Update Invoice.',
     };
   }
 
@@ -136,17 +122,13 @@ export async function updateInvoice(
       WHERE id = ${id}
     `;
   } catch (error) {
-    console.error('DB error updating invoice:', error);
-    return { message: 'Database Error: Failed to update invoice.' };
+    return { message: 'Database Error: Failed to Update Invoice.' };
   }
 
   revalidatePath('/dashboard/invoices');
   redirect('/dashboard/invoices');
 }
 
-// ==========================
-// DELETE INVOICE
-// ==========================
 export async function deleteInvoice(id: string) {
   await sql`DELETE FROM invoices WHERE id = ${id}`;
   revalidatePath('/dashboard/invoices');
