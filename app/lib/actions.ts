@@ -1,21 +1,27 @@
 // app/lib/actions.ts
-'use server';
+"use server";
 
-import { z } from 'zod';
-import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
-import postgres from 'postgres';
-import { signIn } from '@/auth'; // server signIn exported from auth.ts
-import { AuthError } from 'next-auth';
+import { z } from "zod";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import postgres from "postgres";
+import { signIn } from "@/auth"; // server signIn exported from auth.ts
+import { AuthError } from "next-auth";
 
-const sql = postgres(process.env.POSTGRES_URL ?? process.env.DATABASE_URL!, { ssl: 'require' });
+const sql = postgres(process.env.POSTGRES_URL ?? process.env.DATABASE_URL!, {
+  ssl: "require",
+});
 
 // Schemas
 const FormSchema = z.object({
   id: z.string(),
-  customerId: z.string({ invalid_type_error: 'Customer is required' }),
-  amount: z.coerce.number().gt(0, { message: 'Please enter an amount greater than $0.' }),
-  status: z.enum(['paid', 'pending'], { invalid_type_error: 'Status is required' }),
+  customerId: z.string({ invalid_type_error: "Customer is required" }),
+  amount: z.coerce
+    .number()
+    .gt(0, { message: "Please enter an amount greater than $0." }),
+  status: z.enum(["paid", "pending"], {
+    invalid_type_error: "Status is required",
+  }),
   date: z.string(),
 });
 
@@ -25,19 +31,26 @@ const UpdateInvoice = FormSchema.omit({ id: true, date: true });
 // ---------------------
 // authenticate action
 // ---------------------
-export async function authenticate(prevState: string | undefined, formData: FormData) {
+export async function authenticate(
+  prevState: string | undefined,
+  formData: FormData,
+) {
   try {
-    const email = String(formData.get('email') ?? '');
-    const password = String(formData.get('password') ?? '');
-    const redirectTo = String(formData.get('redirectTo') ?? '/dashboard');
+    const email = String(formData.get("email") ?? "");
+    const password = String(formData.get("password") ?? "");
+    const redirectTo = String(formData.get("redirectTo") ?? "/dashboard");
 
     // call NextAuth's signIn server helper with redirect: false so we can handle redirect server-side
-    const result = await signIn('credentials', { email, password, redirect: false });
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+    });
 
     // signIn may return { error } on failure.
     if (result?.error) {
       // Return an error string to client form state
-      return 'Invalid credentials.';
+      return "Invalid credentials.";
     }
 
     // Success: perform a server redirect so the client receives a proper redirect response
@@ -45,10 +58,10 @@ export async function authenticate(prevState: string | undefined, formData: Form
   } catch (error) {
     if (error instanceof AuthError) {
       switch (error.type) {
-        case 'CredentialsSignin':
-          return 'Invalid credentials.';
+        case "CredentialsSignin":
+          return "Invalid credentials.";
         default:
-          return 'Something went wrong.';
+          return "Something went wrong.";
       }
     }
     throw error;
@@ -69,21 +82,21 @@ export type State = {
 
 export async function createInvoice(prevState: State, formData: FormData) {
   const validatedFields = CreateInvoice.safeParse({
-    customerId: formData.get('customerId'),
-    amount: formData.get('amount'),
-    status: formData.get('status'),
+    customerId: formData.get("customerId"),
+    amount: formData.get("amount"),
+    status: formData.get("status"),
   });
 
   if (!validatedFields.success) {
     return {
       errors: validatedFields.error.flatten().fieldErrors,
-      message: 'Missing Fields. Failed to Create Invoice.',
+      message: "Missing Fields. Failed to Create Invoice.",
     };
   }
 
   const { customerId, amount, status } = validatedFields.data;
   const amountInCents = amount * 100;
-  const date = new Date().toISOString().split('T')[0];
+  const date = new Date().toISOString().split("T")[0];
 
   try {
     await sql`
@@ -91,24 +104,28 @@ export async function createInvoice(prevState: State, formData: FormData) {
       VALUES (${customerId}, ${amountInCents}, ${status}, ${date})
     `;
   } catch (error) {
-    return { message: 'Database Error: Failed to Create Invoice.' };
+    return { message: "Database Error: Failed to Create Invoice." };
   }
 
-  revalidatePath('/dashboard/invoices');
-  redirect('/dashboard/invoices');
+  revalidatePath("/dashboard/invoices");
+  redirect("/dashboard/invoices");
 }
 
-export async function updateInvoice(id: string, formData: FormData, prevState: State) {
+export async function updateInvoice(
+  id: string,
+  prevState: State,
+  formData: FormData,
+) {
   const validatedFields = UpdateInvoice.safeParse({
-    customerId: formData.get('customerId'),
-    amount: formData.get('amount'),
-    status: formData.get('status'),
+    customerId: formData.get("customerId"),
+    amount: formData.get("amount"),
+    status: formData.get("status"),
   });
 
   if (!validatedFields.success) {
     return {
       errors: validatedFields.error.flatten().fieldErrors,
-      message: 'Missing Fields. Failed to Update Invoice.',
+      message: "Missing Fields. Failed to Update Invoice.",
     };
   }
 
@@ -122,14 +139,14 @@ export async function updateInvoice(id: string, formData: FormData, prevState: S
       WHERE id = ${id}
     `;
   } catch (error) {
-    return { message: 'Database Error: Failed to Update Invoice.' };
+    return { message: "Database Error: Failed to Update Invoice." };
   }
 
-  revalidatePath('/dashboard/invoices');
-  redirect('/dashboard/invoices');
+  revalidatePath("/dashboard/invoices");
+  redirect("/dashboard/invoices");
 }
 
 export async function deleteInvoice(id: string) {
   await sql`DELETE FROM invoices WHERE id = ${id}`;
-  revalidatePath('/dashboard/invoices');
+  revalidatePath("/dashboard/invoices");
 }
